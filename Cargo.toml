@@ -6,5 +6,6 @@ edition = "2021"
 [dependencies]
 bytemuck = { version = "1.20.0", features = ["derive"] }
 glam = { version = "0.29.2", features = ["bytemuck"] }
+log = "0.4.22"
 roots_core.path = "../roots/roots_core"
 wgpu = "23.0.1"

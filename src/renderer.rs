@@ -18,10 +18,10 @@ pub struct Renderer {
     surface: Surface<'static>,
 
     _shared: SharedRenderResources,
-    circle_pipeline: CirclePipeline,
-    clear_color: Color,
+    pub circle_pipeline: CirclePipeline,
+    pub clear_color: Color,
 
-    _camera_data: OrthographicCamera,
+    camera_data: OrthographicCamera,
     camera: Camera,
 }
 
@@ -36,6 +36,7 @@ impl Renderer {
         let circle_pipeline = CirclePipeline::new(&device, &config, &shared);
 
         let camera_data = OrthographicCamera::new_sized(1920., 1080.);
+        // let camera_data = OrthographicCamera::new_centered(1920. / 2., 1080. / 2.);
         let camera = Camera::new(&device, &camera_data, shared.camera_bind_group_layout());
 
         Self {
@@ -48,7 +49,7 @@ impl Renderer {
             circle_pipeline,
             clear_color: Color::new(0.3, 0.3, 0.3, 1.),
 
-            _camera_data: camera_data,
+            camera_data,
             camera,
         }
     }
@@ -58,6 +59,11 @@ impl Renderer {
         self.config.height = size.height;
 
         self.surface.configure(&self.device, &self.config);
+
+        self.camera_data
+            .set_size(size.width as f32, size.height as f32);
+        self.camera
+            .update_camera(&self.queue, &self.camera_data, &glam::Affine3A::IDENTITY);
     }
 
     pub fn prep(&mut self) {
@@ -138,9 +144,9 @@ impl Vertex for CircleInstance {
 }
 
 impl CircleInstance {
-    pub fn new(pos: glam::Vec2, radius: f32) -> Self {
+    pub fn new(pos: impl Into<glam::Vec2>, radius: f32) -> Self {
         Self {
-            pos,
+            pos: pos.into(),
             radius,
             border_radius: 6.,
             color: glam::Vec4::ONE,
@@ -228,6 +234,7 @@ impl CirclePipeline {
         self.to_prep.push(circle);
     }
 
+    #[inline]
     pub fn finish_prep(&mut self, device: &Device, queue: &Queue) {
         tools::update_instance_buffer(
             device,

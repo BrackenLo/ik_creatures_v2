@@ -956,6 +956,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "glam",
+ "log",
  "roots_core",
  "wgpu",
 ]
