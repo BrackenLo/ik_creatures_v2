@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ik::{Node, NodeID, NodeManager};
+use ik::{ForwardKinematic, InverseKinematic, Node, NodeID, NodeManager};
 use renderer::{CircleInstance, Renderer};
 use roots_core::{
     common::{
@@ -91,8 +91,11 @@ pub struct State {
     mouse_buttons: Input<MouseButton>,
     mouse_input: MouseInput,
 
-    nodes: NodeManager,
+    node_manager: NodeManager,
     node_head: NodeID,
+
+    ik: InverseKinematic,
+    fk: ForwardKinematic,
 }
 
 impl State {
@@ -100,9 +103,33 @@ impl State {
         let renderer = Renderer::new(&window);
         let window_size = window.size();
 
-        let mut nodes = NodeManager::new();
+        let mut node_manager = NodeManager::new();
 
-        let node_head = nodes.insert(Node::new(10.));
+        let nodes = node_manager.insert_nodes(&[
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+        ]);
+
+        let node_head = nodes[0];
+
+        let ik = InverseKinematic {
+            nodes: nodes.clone(),
+            anchor: glam::vec2(300., 300.),
+            target: glam::vec2(0., 0.),
+            cycles: 10,
+        };
+
+        let fk = ForwardKinematic { nodes };
 
         Self {
             window,
@@ -115,8 +142,10 @@ impl State {
             mouse_buttons: Default::default(),
             mouse_input: Default::default(),
 
-            nodes,
+            node_manager,
             node_head,
+            ik,
+            fk,
         }
     }
 
@@ -131,16 +160,17 @@ impl State {
             self.mouse_input.position().x,
             self.window_size.height as f32 - self.mouse_input.position().y,
         );
-        // glam::vec2(0., self.window_size.height as f32) - self.mouse_input.position();
 
-        let head = self.nodes.get_node_mut(&self.node_head).unwrap();
-        // head.pos = self.mouse_input.position();
-        head.pos = mouse_pos;
+        // self.ik.target = mouse_pos;
+        // ik::fabrik(&mut self.node_manager, &self.ik);
 
-        self.nodes.get_values().into_iter().for_each(|node| {
+        self.node_manager.get_node_mut(&self.node_head).unwrap().pos = mouse_pos;
+        ik::process_fk(&mut self.node_manager, &self.fk);
+
+        self.node_manager.get_values().into_iter().for_each(|node| {
             self.renderer
                 .circle_pipeline
-                .prep_circle(CircleInstance::new(node.pos, node.radius));
+                .prep_circle(CircleInstance::new(node.pos, node.radius).hollow());
         });
 
         input::reset_input(&mut self.keys);

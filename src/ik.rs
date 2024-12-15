@@ -4,15 +4,15 @@ use std::{
     f32::consts::TAU,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub radius: f32,
     pub pos: glam::Vec2,
 
     // In Radians
     rotation: f32,
-    pub max_rotation: f32,
-    pub min_rotation: f32,
+    max_rotation: f32,
+    min_rotation: f32,
 }
 
 impl Default for Node {
@@ -112,6 +112,13 @@ impl NodeManager {
         id
     }
 
+    pub fn insert_nodes(&mut self, nodes: &[Node]) -> Vec<NodeID> {
+        nodes
+            .iter()
+            .map(|node| self.insert(node.clone()))
+            .collect::<Vec<_>>()
+    }
+
     #[inline]
     pub fn get_node(&self, id: &NodeID) -> Option<&Node> {
         self.nodes.get(id)
@@ -125,6 +132,30 @@ impl NodeManager {
     #[inline]
     pub fn get_values(&self) -> Values<NodeID, Node> {
         self.nodes.values()
+    }
+
+    pub fn get_nodes_mut(&mut self, node_ids: &[NodeID]) -> Vec<&mut Node> {
+        // A little verbose, this next section gets an array of mutable references to our nodes.
+        let mut nodes = self
+            .nodes
+            .iter_mut()
+            .filter_map(|(id, node)| match node_ids.contains(id) {
+                true => Some((id, node)),
+                false => None,
+            })
+            .collect::<HashMap<_, _>>();
+
+        if nodes.len() < node_ids.len() {
+            log::warn!("Invalid ik - some nodes do not exist");
+            return Vec::new();
+        }
+
+        let nodes = node_ids
+            .iter()
+            .map(|id| nodes.remove(id).unwrap())
+            .collect::<Vec<_>>();
+
+        nodes
     }
 }
 
@@ -157,41 +188,41 @@ pub fn attach_node(parent: &Node, child: &mut Node) {
     child.pos = parent.pos - glam::Vec2::from_angle(child.rotation) * parent.radius;
 }
 
+pub fn process_fk(node_manager: &mut NodeManager, fk: &ForwardKinematic) {
+    if fk.nodes.len() < 2 {
+        return;
+    }
+
+    let mut nodes = node_manager.get_nodes_mut(&fk.nodes);
+
+    (1..fk.nodes.len()).for_each(|index| {
+        let (a, b) = nodes.split_at_mut(index);
+
+        let parent = &a[index - 1];
+        let child = &mut b[0];
+
+        attach_node(parent, child);
+    });
+}
+
 // Forward and backward reaching inverse kinematics
 pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) {
     if ik.nodes.len() < 3 {
+        log::warn!("Invalid ik node count '{}'", ik.nodes.len());
         return;
     }
 
-    // A little verbose, this next section gets an array of mutable references to our nodes.
-    let mut nodes = node_manager
-        .nodes
-        .iter_mut()
-        .filter_map(|(id, node)| match ik.nodes.contains(id) {
-            true => Some((id, node)),
-            false => None,
-        })
-        .collect::<HashMap<_, _>>();
-
-    if nodes.len() < ik.nodes.len() {
-        log::warn!("Invalid ik - some nodes do not exist");
-        return;
-    }
-
-    let mut nodes = ik
-        .nodes
-        .iter()
-        .map(|id| nodes.remove(id).unwrap())
-        .collect::<Vec<_>>();
+    let mut nodes = node_manager.get_nodes_mut(&ik.nodes);
 
     let count = nodes.len();
+    let last = nodes.len() - 1;
 
     let initial_rot = nodes[0].rotation;
 
     for _ in 0..ik.cycles {
-        nodes[count].pos = ik.target;
+        nodes[last].pos = ik.target;
 
-        (0..count - 1).rev().for_each(|index| {
+        (1..count - 1).rev().for_each(|index| {
             let (a, b) = nodes.split_at_mut(index + 1);
 
             let parent = &b[0];
@@ -206,13 +237,13 @@ pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) {
         (1..count).for_each(|index| {
             let (a, b) = nodes.split_at_mut(index);
 
-            let parent = &b[index - 1];
-            let child = &mut a[0];
+            let parent = &a[index - 1];
+            let child = &mut b[0];
 
             attach_node(parent, child);
         });
 
-        if nodes[count].pos == ik.target {
+        if nodes[last].pos == ik.target {
             return;
         }
     }
