@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ik::{ForwardKinematic, InverseKinematic, Node, NodeID, NodeManager};
+use ik::{ForwardKinematic, InverseKinematic, Node, NodeManager};
 use renderer::{CircleInstance, Renderer};
 use roots_core::{
     common::{
@@ -92,10 +92,7 @@ pub struct State {
     mouse_input: MouseInput,
 
     node_manager: NodeManager,
-    node_head: NodeID,
-
-    ik: InverseKinematic,
-    fk: ForwardKinematic,
+    substate: SubState,
 }
 
 impl State {
@@ -105,31 +102,7 @@ impl State {
 
         let mut node_manager = NodeManager::new();
 
-        let nodes = node_manager.insert_nodes(&[
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-        ]);
-
-        let node_head = nodes[0];
-
-        let ik = InverseKinematic {
-            nodes: nodes.clone(),
-            anchor: glam::vec2(300., 300.),
-            target: glam::vec2(0., 0.),
-            cycles: 10,
-        };
-
-        let fk = ForwardKinematic { nodes };
+        let substate = SubState::new_ik(&mut node_manager);
 
         Self {
             window,
@@ -143,29 +116,23 @@ impl State {
             mouse_input: Default::default(),
 
             node_manager,
-            node_head,
-            ik,
-            fk,
+            substate,
         }
     }
 
     fn update(&mut self) {
         roots_core::common::tick_time(&mut self.time);
 
-        self.renderer
-            .circle_pipeline
-            .prep_circle(CircleInstance::new((0., 0.), 10.));
+        if self.keys.just_pressed(KeyCode::Space) {
+            self.change_state();
+        }
 
         let mouse_pos = glam::vec2(
             self.mouse_input.position().x,
             self.window_size.height as f32 - self.mouse_input.position().y,
         );
 
-        // self.ik.target = mouse_pos;
-        // ik::fabrik(&mut self.node_manager, &self.ik);
-
-        self.node_manager.get_node_mut(&self.node_head).unwrap().pos = mouse_pos;
-        ik::process_fk(&mut self.node_manager, &self.fk);
+        self.substate.update(&mut self.node_manager, mouse_pos);
 
         self.node_manager.get_values().into_iter().for_each(|node| {
             self.renderer
@@ -181,5 +148,83 @@ impl State {
     fn render(&mut self) {
         self.renderer.prep();
         self.renderer.render();
+    }
+
+    fn change_state(&mut self) {
+        self.node_manager = NodeManager::new();
+
+        match self.substate {
+            SubState::IK { .. } => self.substate = SubState::new_fk(&mut self.node_manager),
+            SubState::FK { .. } => self.substate = SubState::new_ik(&mut self.node_manager),
+        }
+    }
+}
+
+pub enum SubState {
+    IK { ik: InverseKinematic },
+
+    FK { fk: ForwardKinematic },
+}
+
+impl SubState {
+    pub fn new_ik(node_manager: &mut NodeManager) -> Self {
+        let nodes = node_manager.insert_nodes(&[
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+        ]);
+
+        let ik = InverseKinematic {
+            nodes: nodes.clone(),
+            anchor: glam::vec2(300., 300.),
+            target: glam::vec2(0., 0.),
+            cycles: 10,
+        };
+
+        Self::IK { ik }
+    }
+
+    pub fn new_fk(node_manager: &mut NodeManager) -> Self {
+        let nodes = node_manager.insert_nodes(&[
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+            Node::unlocked(40.),
+        ]);
+
+        let fk = ForwardKinematic { nodes };
+
+        Self::FK { fk }
+    }
+
+    pub fn update(&mut self, node_manager: &mut NodeManager, mouse_pos: glam::Vec2) {
+        match self {
+            SubState::IK { ik } => {
+                ik.target = mouse_pos;
+                ik::fabrik(node_manager, ik);
+            }
+
+            SubState::FK { fk } => {
+                node_manager.get_node_mut(&fk.nodes[0]).unwrap().pos = mouse_pos;
+                ik::process_fk(node_manager, fk);
+            }
+        }
     }
 }
