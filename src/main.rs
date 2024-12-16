@@ -2,7 +2,8 @@ use core::f32;
 use std::time::Duration;
 
 use ik::{ForwardKinematic, InverseKinematic, Node, NodeID, NodeManager};
-use renderer::{CircleInstance, Renderer};
+use polygon_manager::{CustomPolygonNode, PolygonManager};
+use renderer::{CircleInstance, PolygonInstance, Renderer};
 use roots_core::{
     common::{
         input::{self, Input, MouseInput},
@@ -17,6 +18,7 @@ use roots_core::{
 };
 
 mod ik;
+mod polygon_manager;
 mod renderer;
 
 fn main() {
@@ -165,8 +167,12 @@ impl State {
         self.node_manager = NodeManager::new();
 
         match self.substate {
-            SubState::IK { .. } => self.substate = SubState::new_fk(&mut self.node_manager),
-            SubState::FK { .. } => self.substate = SubState::new_creature(&mut self.node_manager),
+            SubState::IK { .. } => {
+                self.substate = SubState::new_fk(&mut self.node_manager, &mut self.renderer)
+            }
+            SubState::FK { .. } => {
+                self.substate = SubState::new_creature(&mut self.node_manager, &mut self.renderer)
+            }
             SubState::Creature { .. } => {
                 self.substate = SubState::new_bridge(&mut self.node_manager)
             }
@@ -184,6 +190,9 @@ pub enum SubState {
         fk: ForwardKinematic,
         prev_mouse_pos: glam::Vec2,
         prev_mouse_delta: glam::Vec2,
+
+        polygons: PolygonManager,
+        instance: PolygonInstance,
     },
 
     Creature {
@@ -194,6 +203,11 @@ pub enum SubState {
 
         prev_mouse_pos: glam::Vec2,
         prev_mouse_delta: glam::Vec2,
+
+        polygons: PolygonManager,
+        polygon_body: PolygonInstance,
+        polygon_arm_right: PolygonInstance,
+        polygon_arm_left: PolygonInstance,
     },
 
     Bridge {
@@ -202,6 +216,9 @@ pub enum SubState {
         gravity_angle: f32,
     },
 }
+
+const CREATURE_BODY_COLOR: glam::Vec4 = glam::vec4(0.118, 0.29, 0.082, 1.);
+const CREATURE_ARM_COLOR: glam::Vec4 = glam::vec4(0.125, 0.412, 0.067, 1.);
 
 impl SubState {
     pub fn new_ik(node_manager: &mut NodeManager) -> Self {
@@ -234,7 +251,7 @@ impl SubState {
         Self::IK { ik }
     }
 
-    pub fn new_fk(node_manager: &mut NodeManager) -> Self {
+    pub fn new_fk(node_manager: &mut NodeManager, renderer: &mut Renderer) -> Self {
         let nodes = node_manager.insert_nodes(&[
             Node::new(50.),
             Node::new(50.),
@@ -258,14 +275,26 @@ impl SubState {
 
         let fk = ForwardKinematic { nodes };
 
+        let polygons = PolygonManager::default();
+        let (vertices, indices) =
+            polygons.calculate_vertices(&node_manager, &fk.nodes, glam::Vec4::ONE, None, None);
+
+        let instance = renderer
+            .polygon_pipeline
+            .new_polygon(&renderer.device, &vertices, &indices);
+
         Self::FK {
             fk,
             prev_mouse_pos: glam::Vec2::ZERO,
             prev_mouse_delta: glam::Vec2::ZERO,
+            polygons,
+            instance,
         }
     }
 
-    pub fn new_creature(node_manager: &mut NodeManager) -> Self {
+    pub fn new_creature(node_manager: &mut NodeManager, renderer: &mut Renderer) -> Self {
+        let mut polygons = PolygonManager::default();
+
         let body_nodes = node_manager.insert_nodes(&[
             Node::new(24.),
             Node::new(30.),
@@ -297,12 +326,34 @@ impl SubState {
 
         arm_right_nodes.extend_from_slice(&node_manager.insert_nodes(&[
             Node::locked(20., 90_f32.to_radians()),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
+            Node::angle(50., f32::consts::PI),
+            Node::angle(50., f32::consts::PI / 1.5),
+            Node::angle(50., f32::consts::PI / 1.5),
         ]));
+
+        polygons.with_custom(vec![
+            (
+                arm_right_nodes[4],
+                CustomPolygonNode {
+                    radius: 20.,
+                    color: glam::vec4(1., 0., 0., 1.),
+                },
+            ),
+            (
+                arm_right_nodes[3],
+                CustomPolygonNode {
+                    radius: 20.,
+                    color: glam::vec4(0.569, 0.463, 0.078, 1.),
+                },
+            ),
+            (
+                arm_right_nodes[2],
+                CustomPolygonNode {
+                    radius: 25.,
+                    color: CREATURE_ARM_COLOR,
+                },
+            ),
+        ]);
 
         let arm_right = InverseKinematic {
             nodes: arm_right_nodes,
@@ -315,12 +366,34 @@ impl SubState {
 
         arm_left_nodes.extend_from_slice(&node_manager.insert_nodes(&[
             Node::locked(20., -90_f32.to_radians()),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
-            Node::angle(25., f32::consts::PI),
+            Node::angle(50., f32::consts::PI),
+            Node::angle(50., f32::consts::PI / 1.5),
+            Node::angle(50., f32::consts::PI / 1.5),
         ]));
+
+        polygons.with_custom(vec![
+            (
+                arm_left_nodes[4],
+                CustomPolygonNode {
+                    radius: 20.,
+                    color: glam::vec4(1., 0., 0., 1.),
+                },
+            ),
+            (
+                arm_left_nodes[3],
+                CustomPolygonNode {
+                    radius: 20.,
+                    color: glam::vec4(0.569, 0.463, 0.078, 1.),
+                },
+            ),
+            (
+                arm_left_nodes[2],
+                CustomPolygonNode {
+                    radius: 25.,
+                    color: CREATURE_ARM_COLOR,
+                },
+            ),
+        ]);
 
         let arm_left = InverseKinematic {
             nodes: arm_left_nodes,
@@ -328,6 +401,42 @@ impl SubState {
             target: glam::Vec2::ZERO,
             cycles: 10,
         };
+
+        let body_poly_data =
+            polygons.calculate_vertices(node_manager, &body.nodes, CREATURE_BODY_COLOR, None, None);
+        let arm_right_poly_data = polygons.calculate_vertices(
+            node_manager,
+            &arm_right.nodes,
+            CREATURE_ARM_COLOR,
+            None,
+            None,
+        );
+        let arm_left_poly_data = polygons.calculate_vertices(
+            node_manager,
+            &arm_left.nodes,
+            CREATURE_ARM_COLOR,
+            None,
+            None,
+        );
+
+        let polygon_arm_right = renderer.polygon_pipeline.new_polygon(
+            &renderer.device,
+            &arm_right_poly_data.0,
+            &arm_right_poly_data.1,
+        );
+
+        let polygon_arm_left = renderer.polygon_pipeline.new_polygon(
+            &renderer.device,
+            &arm_left_poly_data.0,
+            &arm_left_poly_data.1,
+        );
+
+        // Create body after arms to draw on top
+        let polygon_body = renderer.polygon_pipeline.new_polygon(
+            &renderer.device,
+            &body_poly_data.0,
+            &body_poly_data.1,
+        );
 
         Self::Creature {
             body,
@@ -337,44 +446,16 @@ impl SubState {
 
             prev_mouse_pos: glam::Vec2::ZERO,
             prev_mouse_delta: glam::Vec2::ZERO,
+
+            polygons,
+            polygon_body,
+            polygon_arm_right,
+            polygon_arm_left,
         }
     }
 
     pub fn new_bridge(node_manager: &mut NodeManager) -> Self {
-        let nodes = node_manager.insert_nodes(&[
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-            Node::unlocked(20.),
-        ]);
+        let nodes = node_manager.insert_nodes(&[Node::unlocked(20.); 35]);
 
         let ik = InverseKinematic {
             nodes,
@@ -404,6 +485,7 @@ impl SubState {
                 fk,
                 prev_mouse_pos,
                 prev_mouse_delta,
+                ..
             } => {
                 let node = node_manager.get_node_mut(&fk.nodes[0]).unwrap();
                 node.pos = mouse_pos;
@@ -428,6 +510,7 @@ impl SubState {
 
                 prev_mouse_pos,
                 prev_mouse_delta,
+                ..
             } => {
                 let node = node_manager.get_node_mut(&body.nodes[0]).unwrap();
                 node.pos = mouse_pos;
@@ -500,6 +583,8 @@ impl SubState {
                 fk,
                 prev_mouse_pos: _,
                 prev_mouse_delta,
+                polygons,
+                instance,
             } => {
                 let head = node_manager.get_node(&fk.nodes[0]).unwrap();
 
@@ -510,6 +595,16 @@ impl SubState {
                     )
                     .with_color(glam::vec4(1., 0., 0., 1.)),
                 );
+
+                let (vertices, indices) = polygons.calculate_vertices(
+                    &node_manager,
+                    &fk.nodes,
+                    glam::Vec4::ONE,
+                    None,
+                    None,
+                );
+
+                instance.update(&renderer.device, &renderer.queue, &vertices, &indices);
             }
 
             SubState::Creature {
@@ -520,6 +615,11 @@ impl SubState {
 
                 prev_mouse_pos: _,
                 prev_mouse_delta,
+
+                polygons,
+                polygon_body,
+                polygon_arm_right,
+                polygon_arm_left,
             } => {
                 let head = node_manager.get_node(&body.nodes[0]).unwrap();
 
@@ -538,6 +638,48 @@ impl SubState {
 
                 renderer.circle_pipeline.prep_circle(
                     CircleInstance::new(arm_left.target, 5.).with_color(glam::vec4(0., 1., 0., 1.)),
+                );
+
+                let body_poly_data = polygons.calculate_vertices(
+                    node_manager,
+                    &body.nodes,
+                    CREATURE_BODY_COLOR,
+                    None,
+                    None,
+                );
+                polygon_body.update(
+                    &renderer.device,
+                    &renderer.queue,
+                    &body_poly_data.0,
+                    &body_poly_data.1,
+                );
+
+                let arm_right_poly_data = polygons.calculate_vertices(
+                    node_manager,
+                    &arm_right.nodes[1..],
+                    CREATURE_ARM_COLOR,
+                    None,
+                    None,
+                );
+                polygon_arm_right.update(
+                    &renderer.device,
+                    &renderer.queue,
+                    &arm_right_poly_data.0,
+                    &arm_right_poly_data.1,
+                );
+
+                let arm_left_poly_data = polygons.calculate_vertices(
+                    node_manager,
+                    &arm_left.nodes[1..],
+                    CREATURE_ARM_COLOR,
+                    None,
+                    None,
+                );
+                polygon_arm_left.update(
+                    &renderer.device,
+                    &renderer.queue,
+                    &arm_left_poly_data.0,
+                    &arm_left_poly_data.1,
                 );
             }
 

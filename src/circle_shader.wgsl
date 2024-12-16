@@ -37,11 +37,14 @@ struct VertexOut {
 fn vs_main(in: VertexIn) -> VertexOut {
     var out: VertexOut;
 
-    var vertex_pos = in.vertex_pos * (in.radius * 2. + in.border_radius * 2.) + in.pos;
+    var vertex_pos = 
+        in.vertex_pos 
+        * (in.radius * 2. + in.border_radius * 2.) 
+        + in.pos;
 
     out.clip_position = 
-        camera.projection * 
-        vec4<f32>(vertex_pos, 0., 1.);
+        camera.projection 
+        * vec4<f32>(vertex_pos, 0., 1.);
 
     out.pos = vertex_pos;
     out.center = in.pos;
@@ -76,5 +79,4 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 }
 
 //====================================================================
-
 

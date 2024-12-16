@@ -4,7 +4,7 @@ use std::{
     f32::consts::{PI, TAU},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Node {
     pub radius: f32,
     pub pos: glam::Vec2,
@@ -31,8 +31,8 @@ impl Default for Node {
 impl Node {
     const DEFAULT_ANGLE: f32 = 0.6981317; // 40 degrees
 
-    #[inline]
     /// Create new node of size radius with default values
+    #[inline]
     pub fn new(radius: f32) -> Self {
         Self {
             radius,
@@ -40,9 +40,9 @@ impl Node {
         }
     }
 
-    #[inline]
     /// Create a new node with the same min and max rotation.
     /// Rotation should be in radians.
+    #[inline]
     pub fn locked(radius: f32, rotation: f32) -> Self {
         Self {
             radius,
@@ -52,8 +52,8 @@ impl Node {
         }
     }
 
-    #[inline]
     /// Createa new node with 360 degree rotation.
+    #[inline]
     pub fn unlocked(radius: f32) -> Self {
         Self {
             radius,
@@ -63,9 +63,9 @@ impl Node {
         }
     }
 
-    #[inline]
     /// Create a new node with min and max rotation in range -angle to angle.
     /// Angle should be in radians.
+    #[inline]
     pub fn angle(radius: f32, angle: f32) -> Self {
         let angle = angle.abs();
 
@@ -77,9 +77,9 @@ impl Node {
         }
     }
 
-    #[inline]
     /// Create a new node with the given min and max angles.
     /// Angles should be in radians.
+    #[inline]
     pub fn angles(radius: f32, min: f32, max: f32) -> Self {
         Self {
             radius,
@@ -87,6 +87,21 @@ impl Node {
             min_rotation: min,
             ..Default::default()
         }
+    }
+
+    /// Get a point on the outer circle of the node at given angle (in radians)
+    #[inline]
+    pub fn get_point(&self, angle: f32) -> glam::Vec2 {
+        let x = self.radius * angle.cos() + self.pos.x;
+        let y = self.radius * angle.sin() + self.pos.y;
+
+        glam::vec2(x, y)
+    }
+
+    /// Get a point on the outer circle of the node at given angle (in radians) relative to the nodes current rotation
+    #[inline]
+    pub fn get_relative_point(&self, angle: f32) -> glam::Vec2 {
+        self.get_point(self.rotation + angle)
     }
 }
 
