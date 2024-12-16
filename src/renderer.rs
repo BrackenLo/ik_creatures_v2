@@ -20,10 +20,13 @@ pub struct Renderer {
     surface: Surface<'static>,
 
     _shared: SharedRenderResources,
+
     pub circle_pipeline: CirclePipeline,
     pub polygon_pipeline: PolygonPipeline,
-    pub clear_color: Color,
+    pub render_circles: bool,
+    pub render_polygons: bool,
 
+    pub clear_color: Color,
     camera_data: OrthographicCamera,
     camera: Camera,
 }
@@ -52,8 +55,10 @@ impl Renderer {
             _shared: shared,
             circle_pipeline,
             polygon_pipeline,
-            clear_color: Color::new(0.3, 0.3, 0.3, 1.),
+            render_circles: true,
+            render_polygons: true,
 
+            clear_color: Color::new(0.3, 0.3, 0.3, 1.),
             camera_data,
             camera,
         }
@@ -87,11 +92,15 @@ impl Renderer {
             clear_color: Some(self.clear_color),
         });
 
-        self.circle_pipeline
-            .render(&mut render_pass, self.camera.bind_group());
+        if self.render_circles {
+            self.circle_pipeline
+                .render(&mut render_pass, self.camera.bind_group());
+        }
 
-        self.polygon_pipeline
-            .render(&mut render_pass, self.camera.bind_group());
+        if self.render_polygons {
+            self.polygon_pipeline
+                .render(&mut render_pass, self.camera.bind_group());
+        }
 
         render_pass.drop();
         encoder.finish(&self.queue);

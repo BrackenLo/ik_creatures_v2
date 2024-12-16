@@ -130,6 +130,14 @@ impl State {
             self.change_state();
         }
 
+        if self.keys.just_pressed(KeyCode::Digit1) {
+            self.renderer.render_circles = !self.renderer.render_circles;
+        }
+
+        if self.keys.just_pressed(KeyCode::Digit2) {
+            self.renderer.render_polygons = !self.renderer.render_polygons;
+        }
+
         // Change from winit coordinates (winit 0,0 starts top left) to camera coords (0, 0) screen centre
         let mouse_pos = glam::vec2(
             self.mouse_input.position().x,
