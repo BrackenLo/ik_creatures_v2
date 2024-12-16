@@ -1,7 +1,7 @@
 use core::f32;
 use std::{
     collections::{hash_map::Values, HashMap},
-    f32::consts::TAU,
+    f32::consts::{PI, TAU},
 };
 
 #[derive(Debug, Clone)]
@@ -10,9 +10,9 @@ pub struct Node {
     pub pos: glam::Vec2,
 
     // In Radians
-    rotation: f32,
-    max_rotation: f32,
-    min_rotation: f32,
+    pub rotation: f32,
+    pub max_rotation: f32,
+    pub min_rotation: f32,
 }
 
 impl Default for Node {
@@ -44,7 +44,7 @@ impl Node {
         Self {
             radius,
             max_rotation: rotation.to_radians(),
-            min_rotation: rotation.to_radians(),
+            min_rotation: -rotation.to_radians(),
             ..Default::default()
         }
     }
@@ -64,7 +64,7 @@ impl Node {
         Self {
             radius,
             max_rotation: angle.to_radians(),
-            min_rotation: angle.to_radians(),
+            min_rotation: -angle.to_radians(),
             ..Default::default()
         }
     }
@@ -170,16 +170,39 @@ pub struct InverseKinematic {
     pub cycles: usize,
 }
 
-// fn attach_node(parent: &Node, child: &mut Node) {
-//     let direction_vector = parent.pos - child.pos;
-//     child.rotation = direction_vector.to_angle();
+fn attach_node_rotations(parent: &Node, child: &mut Node) {
+    // Get Direction from parent to child
+    let direction_vector = parent.pos - child.pos;
+    child.rotation = direction_vector.to_angle();
 
-//     let rotation_diff = (child.rotation - parent.rotation + TAU + PI) % TAU - PI;
-//     let rotation_diff = rotation_diff.clamp(child.min_rotation, child.max_rotation);
-//     child.rotation = parent.rotation + rotation_diff;
+    // Get the difference in angles between parent and child and clamp if needed
+    let rotation_diff = angle_diff(child.rotation, parent.rotation);
+    let rotation_diff = rotation_diff.clamp(child.min_rotation, child.max_rotation);
+    child.rotation = parent.rotation + rotation_diff;
 
-//     child.pos = parent.pos - glam::Vec2::from_angle(child.rotation) * parent.radius;
-// }
+    child.pos = parent.pos - glam::Vec2::from_angle(child.rotation) * parent.radius;
+}
+
+/// Calculate difference between two angles between -π and π.
+/// Values passed in and out should be in radians.
+#[inline]
+pub fn angle_diff(a: f32, b: f32) -> f32 {
+    let a = a - b;
+
+    if a > PI {
+        a - TAU
+    } else if a < -PI {
+        a + TAU
+    } else {
+        a
+    }
+}
+
+/// Ensure an angle is between -π and π, wrapping around if needed
+#[inline]
+pub fn _wrap_angle(angle: f32) -> f32 {
+    (angle + PI) % TAU - PI
+}
 
 pub fn attach_node(parent: &Node, child: &mut Node) {
     let direction_vector = parent.pos - child.pos;
@@ -201,7 +224,7 @@ pub fn process_fk(node_manager: &mut NodeManager, fk: &ForwardKinematic) {
         let parent = &a[index - 1];
         let child = &mut b[0];
 
-        attach_node(parent, child);
+        attach_node_rotations(parent, child);
     });
 }
 

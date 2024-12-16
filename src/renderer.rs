@@ -79,7 +79,7 @@ impl Renderer {
         });
 
         self.circle_pipeline
-            .render(&mut render_pass, &self.camera.bind_group());
+            .render(&mut render_pass, self.camera.bind_group());
 
         render_pass.drop();
         encoder.finish(&self.queue);

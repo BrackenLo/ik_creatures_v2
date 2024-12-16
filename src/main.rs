@@ -15,8 +15,8 @@ use roots_core::{
     },
 };
 
-pub mod ik;
-pub mod renderer;
+mod ik;
+mod renderer;
 
 fn main() {
     println!("Hello, world!");
@@ -127,6 +127,7 @@ impl State {
             self.change_state();
         }
 
+        // Change from winit coordinates (winit 0,0 starts top left)
         let mouse_pos = glam::vec2(
             self.mouse_input.position().x,
             self.window_size.height as f32 - self.mouse_input.position().y,
@@ -134,12 +135,17 @@ impl State {
 
         self.substate.update(&mut self.node_manager, mouse_pos);
 
+        // Render all nodes
         self.node_manager.get_values().into_iter().for_each(|node| {
             self.renderer
                 .circle_pipeline
                 .prep_circle(CircleInstance::new(node.pos, node.radius).hollow());
         });
 
+        self.substate
+            .render(&mut self.node_manager, &mut self.renderer);
+
+        // Input management
         input::reset_input(&mut self.keys);
         input::reset_input(&mut self.mouse_buttons);
         input::reset_mouse_input(&mut self.mouse_input);
@@ -161,9 +167,15 @@ impl State {
 }
 
 pub enum SubState {
-    IK { ik: InverseKinematic },
+    IK {
+        ik: InverseKinematic,
+    },
 
-    FK { fk: ForwardKinematic },
+    FK {
+        fk: ForwardKinematic,
+        prev_mouse_pos: glam::Vec2,
+        prev_mouse_delta: glam::Vec2,
+    },
 }
 
 impl SubState {
@@ -195,23 +207,35 @@ impl SubState {
 
     pub fn new_fk(node_manager: &mut NodeManager) -> Self {
         let nodes = node_manager.insert_nodes(&[
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
-            Node::unlocked(40.),
+            Node::new(24.),
+            Node::new(30.),
+            Node::new(30.),
+            Node::new(40.),
+            Node::new(45.),
+            Node::new(50.),
+            //
+            Node::new(40.),
+            //
+            Node::new(45.),
+            Node::new(50.),
+            Node::new(40.),
+            Node::new(38.),
+            Node::new(30.),
+            Node::new(22.),
+            Node::new(18.),
+            Node::new(10.),
+            Node::new(10.),
+            Node::new(10.),
+            Node::new(10.),
         ]);
 
         let fk = ForwardKinematic { nodes };
 
-        Self::FK { fk }
+        Self::FK {
+            fk,
+            prev_mouse_pos: glam::Vec2::ZERO,
+            prev_mouse_delta: glam::Vec2::ZERO,
+        }
     }
 
     pub fn update(&mut self, node_manager: &mut NodeManager, mouse_pos: glam::Vec2) {
@@ -221,9 +245,46 @@ impl SubState {
                 ik::fabrik(node_manager, ik);
             }
 
-            SubState::FK { fk } => {
-                node_manager.get_node_mut(&fk.nodes[0]).unwrap().pos = mouse_pos;
+            SubState::FK {
+                fk,
+                prev_mouse_pos,
+                prev_mouse_delta,
+            } => {
+                let node = node_manager.get_node_mut(&fk.nodes[0]).unwrap();
+                node.pos = mouse_pos;
+
+                let mouse_delta = mouse_pos - *prev_mouse_pos;
+                let delta_len = mouse_delta.length();
+
+                if delta_len > 1. {
+                    node.rotation = mouse_delta.to_angle();
+                    *prev_mouse_pos = mouse_pos;
+                    *prev_mouse_delta = mouse_delta;
+                }
+
                 ik::process_fk(node_manager, fk);
+            }
+        }
+    }
+
+    pub fn render(&mut self, node_manager: &mut NodeManager, renderer: &mut Renderer) {
+        match self {
+            SubState::IK { .. } => {}
+
+            SubState::FK {
+                fk,
+                prev_mouse_pos: _,
+                prev_mouse_delta,
+            } => {
+                let head = node_manager.get_node(&fk.nodes[0]).unwrap();
+
+                renderer.circle_pipeline.prep_circle(
+                    CircleInstance::new(
+                        head.pos + (prev_mouse_delta.normalize_or_zero() * 20.),
+                        5.,
+                    )
+                    .with_color(glam::vec4(1., 0., 0., 1.)),
+                );
             }
         }
     }
