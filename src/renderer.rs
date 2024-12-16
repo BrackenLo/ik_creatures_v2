@@ -35,8 +35,8 @@ impl Renderer {
         let shared = SharedRenderResources::new(&device);
         let circle_pipeline = CirclePipeline::new(&device, &config, &shared);
 
-        let camera_data = OrthographicCamera::new_sized(1920., 1080.);
-        // let camera_data = OrthographicCamera::new_centered(1920. / 2., 1080. / 2.);
+        // let camera_data = OrthographicCamera::new_sized(1920., 1080.);
+        let camera_data = OrthographicCamera::new_centered(1920. / 2., 1080. / 2.);
         let camera = Camera::new(&device, &camera_data, shared.camera_bind_group_layout());
 
         Self {
@@ -60,8 +60,11 @@ impl Renderer {
 
         self.surface.configure(&self.device, &self.config);
 
+        // self.camera_data
+        //     .set_size(size.width as f32, size.height as f32);
         self.camera_data
-            .set_size(size.width as f32, size.height as f32);
+            .set_size_centered(size.width as f32 / 2., size.height as f32 / 2.);
+
         self.camera
             .update_camera(&self.queue, &self.camera_data, &glam::Affine3A::IDENTITY);
     }

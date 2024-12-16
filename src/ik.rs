@@ -32,6 +32,7 @@ impl Node {
     const DEFAULT_ANGLE: f32 = 0.6981317; // 40 degrees
 
     #[inline]
+    /// Create new node of size radius with default values
     pub fn new(radius: f32) -> Self {
         Self {
             radius,
@@ -40,16 +41,19 @@ impl Node {
     }
 
     #[inline]
+    /// Create a new node with the same min and max rotation.
+    /// Rotation should be in radians.
     pub fn locked(radius: f32, rotation: f32) -> Self {
         Self {
             radius,
-            max_rotation: rotation.to_radians(),
-            min_rotation: -rotation.to_radians(),
+            max_rotation: rotation,
+            min_rotation: rotation,
             ..Default::default()
         }
     }
 
     #[inline]
+    /// Createa new node with 360 degree rotation.
     pub fn unlocked(radius: f32) -> Self {
         Self {
             radius,
@@ -60,21 +64,27 @@ impl Node {
     }
 
     #[inline]
+    /// Create a new node with min and max rotation in range -angle to angle.
+    /// Angle should be in radians.
     pub fn angle(radius: f32, angle: f32) -> Self {
+        let angle = angle.abs();
+
         Self {
             radius,
-            max_rotation: angle.to_radians(),
-            min_rotation: -angle.to_radians(),
+            max_rotation: angle,
+            min_rotation: -angle,
             ..Default::default()
         }
     }
 
     #[inline]
+    /// Create a new node with the given min and max angles.
+    /// Angles should be in radians.
     pub fn angles(radius: f32, min: f32, max: f32) -> Self {
         Self {
             radius,
-            max_rotation: max.to_radians(),
-            min_rotation: min.to_radians(),
+            max_rotation: max,
+            min_rotation: min,
             ..Default::default()
         }
     }
@@ -165,7 +175,7 @@ pub struct ForwardKinematic {
 
 pub struct InverseKinematic {
     pub nodes: Vec<NodeID>,
-    pub anchor: glam::Vec2,
+    pub anchor: Option<glam::Vec2>,
     pub target: glam::Vec2,
     pub cycles: usize,
 }
@@ -228,11 +238,12 @@ pub fn process_fk(node_manager: &mut NodeManager, fk: &ForwardKinematic) {
     });
 }
 
-// Forward and backward reaching inverse kinematics
-pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) {
+/// Forward and backward reaching inverse kinematics
+/// Returns true if the end node was able to reach the target
+pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) -> bool {
     if ik.nodes.len() < 3 {
         log::warn!("Invalid ik node count '{}'", ik.nodes.len());
-        return;
+        return false;
     }
 
     let mut nodes = node_manager.get_nodes_mut(&ik.nodes);
@@ -241,11 +252,15 @@ pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) {
     let last = nodes.len() - 1;
 
     let initial_rot = nodes[0].rotation;
+    let anchor = match ik.anchor {
+        Some(anchor) => anchor,
+        None => nodes[0].pos,
+    };
 
     for _ in 0..ik.cycles {
         nodes[last].pos = ik.target;
 
-        (1..count - 1).rev().for_each(|index| {
+        (0..count - 1).rev().for_each(|index| {
             let (a, b) = nodes.split_at_mut(index + 1);
 
             let parent = &b[0];
@@ -254,7 +269,7 @@ pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) {
             attach_node(parent, child);
         });
 
-        nodes[0].pos = ik.anchor;
+        nodes[0].pos = anchor;
         nodes[0].rotation = initial_rot;
 
         (1..count).for_each(|index| {
@@ -263,11 +278,13 @@ pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) {
             let parent = &a[index - 1];
             let child = &mut b[0];
 
-            attach_node(parent, child);
+            attach_node_rotations(parent, child);
         });
 
-        if nodes[last].pos == ik.target {
-            return;
+        if (nodes[last].pos - ik.target).length() < 1. {
+            return true;
         }
     }
+
+    false
 }
