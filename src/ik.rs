@@ -281,7 +281,8 @@ pub fn fabrik(node_manager: &mut NodeManager, ik: &InverseKinematic) -> bool {
             attach_node_rotations(parent, child);
         });
 
-        if (nodes[last].pos - ik.target).length() < 1. {
+        // Check if last node finished at the target
+        if (nodes[last].pos - ik.target).length() < 5. {
             return true;
         }
     }

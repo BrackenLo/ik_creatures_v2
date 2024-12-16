@@ -137,7 +137,8 @@ impl State {
             self.window_size.height as f32,
         ) / 2.;
 
-        self.substate.update(&mut self.node_manager, mouse_pos);
+        self.substate
+            .update(&self.time, &mut self.node_manager, mouse_pos);
 
         // Render all nodes
         self.node_manager.get_values().into_iter().for_each(|node| {
@@ -166,7 +167,10 @@ impl State {
         match self.substate {
             SubState::IK { .. } => self.substate = SubState::new_fk(&mut self.node_manager),
             SubState::FK { .. } => self.substate = SubState::new_creature(&mut self.node_manager),
-            SubState::Creature { .. } => self.substate = SubState::new_ik(&mut self.node_manager),
+            SubState::Creature { .. } => {
+                self.substate = SubState::new_bridge(&mut self.node_manager)
+            }
+            SubState::Bridge { .. } => self.substate = SubState::new_ik(&mut self.node_manager),
         }
     }
 }
@@ -190,6 +194,12 @@ pub enum SubState {
 
         prev_mouse_pos: glam::Vec2,
         prev_mouse_delta: glam::Vec2,
+    },
+
+    Bridge {
+        ik: InverseKinematic,
+        gravity: glam::Vec2,
+        gravity_angle: f32,
     },
 }
 
@@ -330,7 +340,60 @@ impl SubState {
         }
     }
 
-    pub fn update(&mut self, node_manager: &mut NodeManager, mouse_pos: glam::Vec2) {
+    pub fn new_bridge(node_manager: &mut NodeManager) -> Self {
+        let nodes = node_manager.insert_nodes(&[
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+            Node::unlocked(20.),
+        ]);
+
+        let ik = InverseKinematic {
+            nodes,
+            anchor: Some(glam::vec2(-300., 0.)),
+            target: glam::Vec2::ZERO,
+            cycles: 10,
+        };
+
+        let gravity_angle = -90_f32.to_radians();
+        let gravity = glam::Vec2::from_angle(gravity_angle) * 300.;
+
+        Self::Bridge {
+            ik,
+            gravity,
+            gravity_angle,
+        }
+    }
+
+    pub fn update(&mut self, time: &Time, node_manager: &mut NodeManager, mouse_pos: glam::Vec2) {
         match self {
             SubState::IK { ik } => {
                 ik.target = mouse_pos;
@@ -395,11 +458,27 @@ impl SubState {
                 if !ik::fabrik(node_manager, arm_left) {
                     let new_target_angle = arm_root_rot + 50_f32.to_radians();
 
-                    // let new_target_angle = prev_mouse_delta.to_angle() + 120_f32.to_radians();
-
                     let new_target_dir = glam::Vec2::from_angle(new_target_angle);
                     arm_left.target = arm_root_pos + new_target_dir * 150.;
                 }
+            }
+
+            SubState::Bridge {
+                ik,
+                gravity,
+                gravity_angle,
+            } => {
+                ik.nodes.iter().skip(1).for_each(|id| {
+                    let node = node_manager.get_node_mut(id).unwrap();
+                    node.pos += *gravity * time.delta_seconds();
+                });
+
+                ik.target = mouse_pos;
+
+                ik::fabrik(node_manager, ik);
+
+                *gravity_angle += 0.5 * time.delta_seconds();
+                *gravity = glam::Vec2::from_angle(*gravity_angle) * 300.;
             }
         }
     }
@@ -459,6 +538,16 @@ impl SubState {
 
                 renderer.circle_pipeline.prep_circle(
                     CircleInstance::new(arm_left.target, 5.).with_color(glam::vec4(0., 1., 0., 1.)),
+                );
+            }
+
+            SubState::Bridge {
+                ik: _,
+                gravity: _,
+                gravity_angle: _,
+            } => {
+                renderer.circle_pipeline.prep_circle(
+                    CircleInstance::new(mouse_pos, 5.).with_color(glam::vec4(1., 0., 0., 1.)),
                 );
             }
         }
