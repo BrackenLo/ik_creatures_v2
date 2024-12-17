@@ -65,6 +65,7 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, size: Size<u32>) {
+        log::debug!("Resizing window with new size {}", size);
         self.config.width = size.width;
         self.config.height = size.height;
 
