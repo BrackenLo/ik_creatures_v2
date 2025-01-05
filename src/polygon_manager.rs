@@ -7,19 +7,45 @@ use crate::{
 };
 
 #[derive(Clone, Copy)]
-pub struct CustomPolygonNode {
-    pub radius: f32,
-    pub color: glam::Vec4,
+pub struct PolygonNode {
+    pub radius: Option<f32>,
+    pub color: Option<glam::Vec4>,
+}
+
+impl PolygonNode {
+    #[inline]
+    pub fn radius(radius: f32) -> Self {
+        Self {
+            radius: Some(radius),
+            color: None,
+        }
+    }
+
+    #[inline]
+    pub fn color(color: impl Into<glam::Vec4>) -> Self {
+        Self {
+            radius: None,
+            color: Some(color.into()),
+        }
+    }
+
+    #[inline]
+    pub fn all(radius: f32, color: impl Into<glam::Vec4>) -> Self {
+        Self {
+            radius: Some(radius),
+            color: Some(color.into()),
+        }
+    }
 }
 
 #[derive(Default)]
 pub struct PolygonManager {
-    custom_nodes: HashMap<NodeID, CustomPolygonNode>,
+    custom_nodes: HashMap<NodeID, PolygonNode>,
 }
 
 impl PolygonManager {
     #[inline]
-    pub fn with_custom(&mut self, nodes: Vec<(NodeID, CustomPolygonNode)>) {
+    pub fn with_custom(&mut self, nodes: Vec<(NodeID, PolygonNode)>) {
         nodes.into_iter().for_each(|(id, node)| {
             self.custom_nodes.insert(id, node);
         });
@@ -45,28 +71,32 @@ impl PolygonManager {
             .flat_map(|node_id| {
                 let node = node_manager.get_node(node_id).unwrap();
 
-                let polygon_node = match self.custom_nodes.get(node_id) {
-                    Some(custom) => *custom,
-                    None => CustomPolygonNode {
-                        radius: node.radius,
-                        color,
-                    },
+                let (radius, color) = match self.custom_nodes.get(node_id) {
+                    Some(PolygonNode {
+                        radius: custom_radius,
+                        color: custom_color,
+                    }) => (
+                        custom_radius.unwrap_or(node.radius),
+                        custom_color.unwrap_or(color),
+                    ),
+
+                    None => (node.radius, color),
                 };
 
                 [
                     PolygonVertex {
                         pos: glam::Vec2::from_angle(node.rotation - f32::consts::FRAC_PI_2)
-                            * polygon_node.radius
+                            * radius
                             + node.pos,
                         pad: [0; 2],
-                        color: polygon_node.color,
+                        color,
                     },
                     PolygonVertex {
                         pos: glam::Vec2::from_angle(node.rotation + f32::consts::FRAC_PI_2)
-                            * polygon_node.radius
+                            * radius
                             + node.pos,
                         pad: [0; 2],
-                        color: polygon_node.color,
+                        color,
                     },
                 ]
             })

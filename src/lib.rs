@@ -150,6 +150,10 @@ impl State {
             }
         }
 
+        if self.keys.just_pressed(KeyCode::Digit3) {
+            self.window.hide_cursor(true);
+        }
+
         // Change from winit coordinates (winit 0,0 starts top left) to camera coords (0, 0) screen centre
         let mouse_pos = glam::vec2(
             self.mouse_input.position().x,
@@ -194,7 +198,7 @@ impl State {
                 self.substate = SubState::new_creature(&mut self.node_manager, &mut self.renderer);
             }
             SubState::Creature(_) => {
-                self.substate = SubState::new_bridge(&mut self.node_manager);
+                self.substate = SubState::new_bridge(&mut self.node_manager, &mut self.renderer);
             }
             SubState::Bridge(_) => {
                 self.substate = SubState::new_ik(&mut self.node_manager);

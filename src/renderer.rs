@@ -58,7 +58,7 @@ impl Renderer {
             render_circles: true,
             render_polygons: true,
 
-            clear_color: Color::new(0.3, 0.3, 0.3, 1.),
+            clear_color: Color::new(0.1, 0.1, 0.1, 1.),
             camera_data,
             camera,
         }
